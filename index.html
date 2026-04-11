@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Form and Meaning</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+#wall {
+    width: 1920px;
+    height: 1080px;
+    position: relative;
+    overflow: hidden;
+    transform-origin: top left;
+    background: #fffff;
+  }
+
+  .poster {
+    position: absolute;
+    overflow: hidden;
+    box-shadow: none;
+    transition:
+      left      1.2s cubic-bezier(.77,0,.18,1),
+      top       1.2s cubic-bezier(.77,0,.18,1),
+      width     1.2s cubic-bezier(.77,0,.18,1),
+      height    1.2s cubic-bezier(.77,0,.18,1),
+      transform 1.2s cubic-bezier(.77,0,.18,1);
+  }
+
+  .poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .text-tag {
+    position: absolute;
+    font-family: 'Arial Black', Impact, sans-serif;
+    font-weight: 900;
+    pointer-events: none;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    z-index: 99999;
+    transition:
+      left      1.2s cubic-bezier(.77,0,.18,1),
+      top       1.2s cubic-bezier(.77,0,.18,1),
+      font-size 1.2s cubic-bezier(.77,0,.18,1),
+      transform 1.2s cubic-bezier(.77,0,.18,1);
+  }
+
+  #timer-wrap {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    z-index: 999999;
+    opacity: 90%;
+  }
+  #timer-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  #timer-ring {
+    fill: none;
+    stroke: #FFD700;
+    stroke-width: 4;
+    stroke-linecap: round;
+  }
+
+#grid-bg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 3px;
+  padding: 3px;
+  z-index: 0;
+  opacity: 0.60;
+}
+
+#grid-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+</style>
+</head>
+<body>
+<div id="wall">
+  <div id="grid-bg"></div>
+</div>
+
+<div id="timer-wrap">
+  <svg viewBox="0 0 44 44">
+    <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4"/>
+    <circle id="timer-ring" cx="22" cy="22" r="20"/>
+  </svg>
+</div>
+
+<script>
+/* ─── CONFIG ─────────────────────────────────────── */
+const WALL_W      = 1920;
+const WALL_H      = 1080;
+const ASPECT      = 11 / 8.5;        // 11×8.5 in landscape
+const INTERVAL_MS = 30 * 1000;
+const NUM_POSTERS = 27;
+
+const SIZE_BANDS = [
+  { w: 300 },
+  { w: 400 },
+  { w: 500 },
+  { w: 650 },
+  { w: 780 },
+  { w: 900 },
+];
+
+const TAG_COLORS = ['#ffffff', '#FFD700'];
+const TAG_COUNT  = 9;
+
+/* 27 images: images/01.png … images/27.png */
+const imageSources = [
+  'images/01.JPG', 'images/02.JPG', 'images/03.JPG', 'images/04.png',
+  'images/05.png', 'images/06.png', 'images/07.png', 'images/08.png',
+  'images/09.png', 'images/10.png', 'images/11.png', 'images/12.png',
+  'images/13.png', 'images/14.png', 'images/15.png', 'images/16.png',
+  'images/17.png', 'images/18.png', 'images/19.png', 'images/20.png',
+  'images/21.png', 'images/22.png', 'images/23.png', 'images/24.png',
+  'images/25.png', 'images/26.png', 'images/27.png',
+];
+
+/* ─── SCALE WALL TO FIT VIEWPORT ─────────────────── */
+function scaleWall() {
+  const wall  = document.getElementById('wall');
+  const scaleX = window.innerWidth  / WALL_W;
+  const scaleY = window.innerHeight / WALL_H;
+  const scale  = Math.min(scaleX, scaleY);
+  wall.style.transform = `scale(${scale})`;
+  wall.style.marginLeft = ((window.innerWidth  - WALL_W * scale) / 2) + 'px';
+  wall.style.marginTop  = ((window.innerHeight - WALL_H * scale) / 2) + 'px';
+}
+scaleWall();
+window.addEventListener('resize', scaleWall);
+
+/* ─── SEEDED RNG ──────────────────────────────────── */
+function rng(seed) {
+  let s = seed + 1;
+  return () => {
+    s = Math.sin(s) * 10000;
+    return s - Math.floor(s);
+  };
+}
+
+/* ─── LAYOUT GENERATOR ───────────────────────────── */
+function generateLayout(seed) {
+  const rand = rng(seed);
+
+  const posters = [];
+  for (let i = 0; i < NUM_POSTERS; i++) {
+    const band  = SIZE_BANDS[Math.floor(rand() * SIZE_BANDS.length)];
+    const w     = band.w + Math.floor((rand() - 0.5) * 50);
+    const h     = Math.round(w / ASPECT);
+    const x     = Math.floor(rand() * (WALL_W + w * 0.2)) - w * 0.1;
+    const y     = Math.floor(rand() * (WALL_H + h * 0.2)) - h * 0.1;
+    const rot   = (rand() - 0.5) * 6;
+    const z     = Math.floor(rand() * NUM_POSTERS) + 1;
+    const imgIdx = i; // cycle through all 27 images each layout
+    posters.push({ w, h, x, y, rot, z, imgIdx });
+  }
+
+  const tags = [];
+  for (let i = 0; i < TAG_COUNT; i++) {
+    const size  = 16 + Math.floor(rand() * 26);
+    const x     = Math.floor(rand() * (WALL_W - 380));
+    const y     = Math.floor(rand() * (WALL_H - 50));
+    const rot   = (rand() - 0.5) * 8;
+    const color = TAG_COLORS[Math.floor(rand() * TAG_COLORS.length)];
+    tags.push({ x, y, size, rot, color });
+  }
+
+  return { posters, tags };
+}
+
+/* ─── BUILD DOM ──────────────────────────────────── */
+const wall = document.getElementById('wall');
+
+const gridBg = document.getElementById('grid-bg');
+for (let i = 0; i < 60; i++) {
+  const img = document.createElement('img');
+  img.src = imageSources[i % imageSources.length];
+  img.alt = '';
+  gridBg.appendChild(img);
+}
+
+const posterEls = [];
+for (let i = 0; i < NUM_POSTERS; i++) {
+  const div = document.createElement('div');
+  div.className = 'poster';
+  const img = document.createElement('img');
+  img.alt = '';
+  div.appendChild(img);
+  wall.appendChild(div);
+  posterEls.push({ div, img });
+}
+
+const tagEls = [];
+for (let i = 0; i < TAG_COUNT; i++) {
+  const el = document.createElement('div');
+  el.className = 'text-tag';
+  el.textContent = 'FORM AND MEANING';
+  wall.appendChild(el);
+  tagEls.push(el);
+}
+
+/* ─── APPLY LAYOUT ───────────────────────────────── */
+function applyLayout(seed) {
+  const { posters, tags } = generateLayout(seed);
+
+  posters.forEach((p, i) => {
+    const { div, img } = posterEls[i];
+    img.src             = imageSources[p.imgIdx];
+    div.style.left      = p.x + 'px';
+    div.style.top       = p.y + 'px';
+    div.style.width     = p.w + 'px';
+    div.style.height    = p.h + 'px';
+    div.style.transform = `rotate(${p.rot}deg)`;
+    div.style.zIndex    = p.z;
+  });
+
+  tags.forEach((t, i) => {
+    const el            = tagEls[i];
+    el.style.left       = t.x + 'px';
+    el.style.top        = t.y + 'px';
+    el.style.fontSize   = t.size + 'px';
+    el.style.transform  = `rotate(${t.rot}deg)`;
+    el.style.color      = t.color;
+  });
+}
+
+/* ─── TIMER RING ─────────────────────────────────── */
+const ring     = document.getElementById('timer-ring');
+const CIRCUMF  = 2 * Math.PI * 20;
+ring.style.strokeDasharray  = CIRCUMF;
+ring.style.strokeDashoffset = 0;
+
+let tickStart;
+function startRing(t0) {
+  tickStart = t0;
+  function frame(now) {
+    const progress = Math.min((now - tickStart) / INTERVAL_MS, 1);
+    ring.style.strokeDashoffset = CIRCUMF * progress;
+    if (progress < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ─── BOOT ───────────────────────────────────────── */
+let seed = Date.now();
+applyLayout(seed);
+startRing(performance.now());
+
+setInterval(() => {
+  seed = Date.now();
+  applyLayout(seed);
+  startRing(performance.now());
+}, INTERVAL_MS);
+</script>
+</body>
+</html>
